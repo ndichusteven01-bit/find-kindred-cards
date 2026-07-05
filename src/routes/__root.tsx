@@ -77,19 +77,39 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "BIN Lookup — Free Bank Card BIN/IIN Checker" },
+      {
+        name: "description",
+        content:
+          "Free BIN lookup tool. Enter the first 6–8 digits of a card to instantly find the issuing bank, scheme, brand, card type, country and currency.",
+      },
+      { name: "author", content: "BIN Lookup" },
+      { name: "keywords", content: "BIN lookup, IIN checker, bank identification number, card checker, BIN database" },
+      { property: "og:title", content: "BIN Lookup — Free Bank Card BIN/IIN Checker" },
+      {
+        property: "og:description",
+        content:
+          "Instantly identify the bank, scheme, brand, country and type behind any card BIN. Fast, free and mobile friendly.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "BIN Lookup — Free Bank Card BIN/IIN Checker" },
+      { name: "description", content: "Free BIN lookup tool. Enter the first 6–8 digits of a card to instantly find the issuing bank, scheme, brand, card type, country and currency." },
+      { property: "og:description", content: "Free BIN lookup tool. Enter the first 6–8 digits of a card to instantly find the issuing bank, scheme, brand, card type, country and currency." },
+      { name: "twitter:description", content: "Free BIN lookup tool. Enter the first 6–8 digits of a card to instantly find the issuing bank, scheme, brand, card type, country and currency." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e6adf099-7cf9-470f-9719-2b092145c353/id-preview-c857d13a--8678e1d1-7a7f-4777-bfa8-909c6b3781a0.lovable.app-1783202811954.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e6adf099-7cf9-470f-9719-2b092145c353/id-preview-c857d13a--8678e1d1-7a7f-4777-bfa8-909c6b3781a0.lovable.app-1783202811954.png" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
