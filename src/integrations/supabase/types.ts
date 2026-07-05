@@ -14,16 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ad_banners: {
+        Row: {
+          active: boolean
+          background_color: string
+          created_at: string
+          id: string
+          image_url: string | null
+          label: string
+          link_url: string | null
+          slot: number
+          text_color: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          background_color?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          label?: string
+          link_url?: string | null
+          slot: number
+          text_color?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          background_color?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          label?: string
+          link_url?: string | null
+          slot?: number
+          text_color?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bin_cache: {
+        Row: {
+          bank_name: string | null
+          bank_phone: string | null
+          bank_url: string | null
+          bin: string
+          brand: string | null
+          card_type: string | null
+          category: string | null
+          commercial: boolean | null
+          country_code: string | null
+          country_emoji: string | null
+          country_name: string | null
+          created_at: string
+          currency: string | null
+          id: string
+          lookups: number
+          prepaid: boolean | null
+          raw: Json | null
+          scheme: string | null
+          updated_at: string
+        }
+        Insert: {
+          bank_name?: string | null
+          bank_phone?: string | null
+          bank_url?: string | null
+          bin: string
+          brand?: string | null
+          card_type?: string | null
+          category?: string | null
+          commercial?: boolean | null
+          country_code?: string | null
+          country_emoji?: string | null
+          country_name?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          lookups?: number
+          prepaid?: boolean | null
+          raw?: Json | null
+          scheme?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bank_name?: string | null
+          bank_phone?: string | null
+          bank_url?: string | null
+          bin?: string
+          brand?: string | null
+          card_type?: string | null
+          category?: string | null
+          commercial?: boolean | null
+          country_code?: string | null
+          country_emoji?: string | null
+          country_name?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          lookups?: number
+          prepaid?: boolean | null
+          raw?: Json | null
+          scheme?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      contact_messages: {
+        Row: {
+          category: string
+          created_at: string
+          email: string
+          id: string
+          message: string
+          name: string
+          read: boolean
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          name: string
+          read?: boolean
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          name?: string
+          read?: boolean
+        }
+        Relationships: []
+      }
+      site_settings: {
+        Row: {
+          created_at: string
+          id: number
+          jabber_url: string
+          telegram_url: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          jabber_url?: string
+          telegram_url?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          jabber_url?: string
+          telegram_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +335,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
