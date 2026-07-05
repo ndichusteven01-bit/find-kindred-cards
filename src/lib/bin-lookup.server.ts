@@ -319,15 +319,16 @@ export class BinLookupService {
   }
 
   private async fromCache(bin: string): Promise<BinResult | null> {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
+    const { getPublicSupabase } = await import("./supabase-public.server");
+    const supabase = getPublicSupabase();
+    const { data, error } = await supabase
       .from("bin_cache")
       .select("*")
       .eq("bin", bin)
       .maybeSingle();
     if (error || !data) return null;
 
-    void supabaseAdmin
+    void supabase
       .from("bin_cache")
       .update({ lookups: (data.lookups ?? 1) + 1 })
       .eq("bin", bin);
@@ -351,7 +352,7 @@ export class BinLookupService {
     };
     const enriched = await enrichBankContact(cached);
     if (enriched.bankUrl !== cached.bankUrl || enriched.bankPhone !== cached.bankPhone) {
-      void supabaseAdmin
+      void supabase
         .from("bin_cache")
         .update({ bank_url: enriched.bankUrl, bank_phone: enriched.bankPhone })
         .eq("bin", bin);
@@ -361,8 +362,9 @@ export class BinLookupService {
   }
 
   private async saveToCache(result: BinResult, raw: unknown): Promise<void> {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("bin_cache").upsert(
+    const { getPublicSupabase } = await import("./supabase-public.server");
+    const supabase = getPublicSupabase();
+    await supabase.from("bin_cache").upsert(
       {
         bin: result.bin,
         scheme: result.scheme,
@@ -383,6 +385,7 @@ export class BinLookupService {
       { onConflict: "bin" },
     );
   }
+
 
   /** Query one provider. */
   private async queryProvider(

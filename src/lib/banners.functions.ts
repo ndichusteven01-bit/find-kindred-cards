@@ -13,8 +13,8 @@ export interface AdBanner {
 }
 
 export const listBanners = createServerFn({ method: "GET" }).handler(async (): Promise<AdBanner[]> => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
+  const { getPublicSupabase } = await import("./supabase-public.server");
+  const { data, error } = await getPublicSupabase()
     .from("ad_banners")
     .select("id, slot, label, image_url, link_url, background_color, text_color, active")
     .order("slot", { ascending: true });
@@ -25,15 +25,7 @@ export const listBanners = createServerFn({ method: "GET" }).handler(async (): P
 export const listAllBanners = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdBanner[]> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    const { data } = await supabaseAdmin
+    const { data } = await context.supabase
       .from("ad_banners")
       .select("id, slot, label, image_url, link_url, background_color, text_color, active")
       .order("slot", { ascending: true });
@@ -44,15 +36,7 @@ export const upsertBanner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: Partial<AdBanner> & { slot: number }) => data)
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    const { error } = await supabaseAdmin
+    const { error } = await context.supabase
       .from("ad_banners")
       .upsert(
         {
@@ -74,15 +58,7 @@ export const deleteBanner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { slot: number }) => data)
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    const { error } = await supabaseAdmin
+    const { error } = await context.supabase
       .from("ad_banners")
       .update({ image_url: null, link_url: null, label: "", active: false })
       .eq("slot", data.slot);
@@ -91,27 +67,19 @@ export const deleteBanner = createServerFn({ method: "POST" })
   });
 
 // Bootstrap: promote the current signed-in user to admin if no admin exists yet.
+// Uses a SECURITY DEFINER RPC so no service role key is needed.
 export const claimAdminIfEmpty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count } = await supabaseAdmin
-      .from("user_roles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "admin");
-    if ((count ?? 0) > 0) return { claimed: false };
-    const { error } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: context.userId, role: "admin" });
+    const { data, error } = await context.supabase.rpc("claim_admin_if_empty");
     if (error) throw new Error(error.message);
-    return { claimed: true };
+    return { claimed: !!data };
   });
 
 export const isCurrentUserAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ admin: boolean }> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await supabaseAdmin
+    const { data } = await context.supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", context.userId)
