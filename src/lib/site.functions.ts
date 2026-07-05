@@ -18,8 +18,8 @@ export interface ContactMessage {
 
 export const getSiteSettings = createServerFn({ method: "GET" }).handler(
   async (): Promise<SiteSettings> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await supabaseAdmin
+    const { getPublicSupabase } = await import("./supabase-public.server");
+    const { data } = await getPublicSupabase()
       .from("site_settings")
       .select("telegram_url, jabber_url")
       .eq("id", 1)
@@ -38,15 +38,7 @@ export const updateSiteSettings = createServerFn({ method: "POST" })
     jabber_url: String(data.jabber_url ?? "").slice(0, 500),
   }))
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    const { error } = await supabaseAdmin
+    const { error } = await context.supabase
       .from("site_settings")
       .upsert({ id: 1, ...data }, { onConflict: "id" });
     if (error) throw new Error(error.message);
@@ -65,8 +57,8 @@ export const submitContactMessage = createServerFn({ method: "POST" })
     return { category: cat as "general" | "advertisement", name, email, message };
   })
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("contact_messages").insert(data);
+    const { getPublicSupabase } = await import("./supabase-public.server");
+    const { error } = await getPublicSupabase().from("contact_messages").insert(data);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -74,15 +66,7 @@ export const submitContactMessage = createServerFn({ method: "POST" })
 export const listContactMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ContactMessage[]> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    const { data } = await supabaseAdmin
+    const { data } = await context.supabase
       .from("contact_messages")
       .select("id, category, name, email, message, read, created_at")
       .order("created_at", { ascending: false });
@@ -93,14 +77,6 @@ export const deleteContactMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) throw new Error("Forbidden");
-    await supabaseAdmin.from("contact_messages").delete().eq("id", data.id);
+    await context.supabase.from("contact_messages").delete().eq("id", data.id);
     return { ok: true };
   });
