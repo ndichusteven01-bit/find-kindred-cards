@@ -77,7 +77,6 @@ function Muted({ children }: { children: React.ReactNode }) {
 export function BinLookup() {
   const [bin, setBin] = useState("");
   const [view, setView] = useState<ViewState>({ status: "idle" });
-  const runLookup = useServerFn(lookupBin);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -88,7 +87,7 @@ export function BinLookup() {
     }
     setView({ status: "loading" });
     try {
-      const outcome = await runLookup({ data: { bin: cleaned } });
+      const outcome = await lookupBin({ bin: cleaned });
       if (outcome.status === "success") setView({ status: "success", data: outcome.data });
       else if (outcome.status === "not_found") setView({ status: "not_found", bin: cleaned });
       else setView({ status: "error", message: outcome.message });
