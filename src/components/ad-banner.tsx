@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { listBanners, type AdBanner } from "@/lib/banners.functions";
+import { listBanners, type AdBanner } from "@/lib/banners.api";
 
 export function AdBanner() {
   const [banners, setBanners] = useState<AdBanner[]>([]);
-  const load = useServerFn(listBanners);
 
   useEffect(() => {
-    load()
+    listBanners()
       .then((b) => setBanners(b.filter((x) => x.active && x.image_url)))
       .catch(() => {});
-  }, [load]);
+  }, []);
 
   if (banners.length === 0) return null;
 
