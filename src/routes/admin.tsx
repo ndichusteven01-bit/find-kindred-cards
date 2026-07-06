@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
   listAllBanners,
@@ -9,7 +8,7 @@ import {
   claimAdminIfEmpty,
   isCurrentUserAdmin,
   type AdBanner,
-} from "@/lib/banners.functions";
+} from "@/lib/banners.api";
 import {
   getSiteSettings,
   updateSiteSettings,
@@ -17,7 +16,7 @@ import {
   deleteContactMessage,
   type SiteSettings,
   type ContactMessage,
-} from "@/lib/site.functions";
+} from "@/lib/site.api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -39,16 +38,6 @@ function AdminPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
 
-  const load = useServerFn(listAllBanners);
-  const save = useServerFn(upsertBanner);
-  const remove = useServerFn(deleteBanner);
-  const claim = useServerFn(claimAdminIfEmpty);
-  const checkAdmin = useServerFn(isCurrentUserAdmin);
-  const loadSettings = useServerFn(getSiteSettings);
-  const saveSettings = useServerFn(updateSiteSettings);
-  const loadMessages = useServerFn(listContactMessages);
-  const removeMessage = useServerFn(deleteContactMessage);
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -58,15 +47,13 @@ function AdminPage() {
           nav({ to: "/auth" });
           return;
         }
-        // Try to claim admin if none exists yet
-        try { await claim(); } catch {}
-        const { admin } = await checkAdmin();
+        try { await claimAdminIfEmpty(); } catch {}
+        const { admin } = await isCurrentUserAdmin();
         if (cancelled) return;
         setIsAdmin(admin);
         if (admin) {
-          const b = await load();
+          const b = await listAllBanners();
           if (cancelled) return;
-          // ensure 6 slots present
           const filled: AdBanner[] = Array.from({ length: 6 }, (_, i) => {
             const found = b.find((x) => x.slot === i + 1);
             return (
@@ -83,7 +70,7 @@ function AdminPage() {
             );
           });
           setBanners(filled);
-          const [s, m] = await Promise.all([loadSettings(), loadMessages().catch(() => [] as ContactMessage[])]);
+          const [s, m] = await Promise.all([getSiteSettings(), listContactMessages().catch(() => [] as ContactMessage[])]);
           if (cancelled) return;
           setSettings(s);
           setMessages(m);
@@ -95,12 +82,12 @@ function AdminPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [nav, load, claim, checkAdmin, loadSettings, loadMessages]);
+  }, [nav]);
 
   async function handleSaveSettings() {
     setSavingSettings(true);
     try {
-      await saveSettings({ data: settings });
+      await updateSiteSettings(settings);
     } finally {
       setSavingSettings(false);
     }
@@ -108,7 +95,7 @@ function AdminPage() {
 
   async function handleDeleteMessage(id: string) {
     if (!confirm("Delete this message?")) return;
-    await removeMessage({ data: { id } });
+    await deleteContactMessage(id);
     setMessages((prev) => prev.filter((m) => m.id !== id));
   }
 
@@ -119,7 +106,7 @@ function AdminPage() {
     }
     setSaving(b.slot);
     try {
-      await save({ data: b });
+      await upsertBanner(b);
     } finally {
       setSaving(null);
     }
@@ -129,7 +116,7 @@ function AdminPage() {
     if (!confirm(`Delete banner in slot ${slot}?`)) return;
     setSaving(slot);
     try {
-      await remove({ data: { slot } });
+      await deleteBanner(slot);
       update(slot, { image_url: null, link_url: null, label: "", active: false });
     } finally {
       setSaving(null);
