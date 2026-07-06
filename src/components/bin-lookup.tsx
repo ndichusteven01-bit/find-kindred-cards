@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { Search, Loader2, Database, Zap, AlertCircle, SearchX } from "lucide-react";
 
-import { lookupBin, type BinResult } from "@/lib/bin-lookup.functions";
+import { lookupBin, type BinResult } from "@/lib/bin-lookup.api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
