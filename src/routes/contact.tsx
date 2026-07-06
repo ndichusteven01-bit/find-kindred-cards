@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Send, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { submitContactMessage } from "@/lib/site.functions";
+import { submitContactMessage } from "@/lib/site.api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +17,6 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const submit = useServerFn(submitContactMessage);
   const [category, setCategory] = useState<"general" | "advertisement">("general");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -32,7 +30,7 @@ function ContactPage() {
     setErr(null);
     setBusy(true);
     try {
-      await submit({ data: { category, name, email, message } });
+      await submitContactMessage({ category, name, email, message });
       setDone(true);
       setName(""); setEmail(""); setMessage("");
     } catch (e) {

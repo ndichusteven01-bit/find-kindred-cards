@@ -1,1 +1,4 @@
 project_id = "mejwbfwidbqpoyvzdjir"
+
+[functions.bin-lookup]
+verify_jwt = false

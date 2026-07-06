@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { Send, MessageCircle, Mail } from "lucide-react";
-import { getSiteSettings, type SiteSettings } from "@/lib/site.functions";
+import { getSiteSettings, type SiteSettings } from "@/lib/site.api";
 
 export function SiteFooter() {
   const [s, setS] = useState<SiteSettings>({ telegram_url: "", jabber_url: "" });
-  const load = useServerFn(getSiteSettings);
   useEffect(() => {
-    load().then(setS).catch(() => {});
-  }, [load]);
+    getSiteSettings().then(setS).catch(() => {});
+  }, []);
 
   const iconCls =
     "group inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary hover:shadow-glow";
