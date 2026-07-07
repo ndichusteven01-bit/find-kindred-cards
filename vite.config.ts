@@ -12,7 +12,7 @@ export default defineConfig({
   },
   vite: {
     environments: {
-      server: {
+      ssr: {
         resolve: {
           noExternal: true,
         },
