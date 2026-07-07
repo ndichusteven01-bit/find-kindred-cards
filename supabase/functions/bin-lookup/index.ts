@@ -255,6 +255,37 @@ async function lookup(rawBin: string): Promise<Outcome> {
   return { status: "not_found" };
 }
 
+async function guessBankWebsite(bankName: string, countryCode: string | null): Promise<string | null> {
+  try {
+    const query = encodeURIComponent(`${bankName}${countryCode ? " " + countryCode : ""} official bank website`);
+    const res = await fetch(`https://api.duckduckgo.com/?q=${query}&format=json&no_html=1&no_redirect=1&t=binlookup`, {
+      headers: { Accept: "application/json", "User-Agent": "bin-lookup-app" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null) as any;
+    const candidates: string[] = [];
+    if (data?.AbstractURL) candidates.push(data.AbstractURL);
+    if (Array.isArray(data?.Results)) for (const r of data.Results) if (r?.FirstURL) candidates.push(r.FirstURL);
+    if (Array.isArray(data?.RelatedTopics)) {
+      for (const r of data.RelatedTopics) {
+        if (r?.FirstURL) candidates.push(r.FirstURL);
+        if (Array.isArray(r?.Topics)) for (const t of r.Topics) if (t?.FirstURL) candidates.push(t.FirstURL);
+      }
+    }
+    for (const url of candidates) {
+      try {
+        const host = new URL(url).hostname.replace(/^www\./, "");
+        if (host && !/duckduckgo|wikipedia|facebook|twitter|linkedin|youtube|instagram|bloomberg/i.test(host)) {
+          return host;
+        }
+      } catch { /* skip */ }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   try {
