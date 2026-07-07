@@ -10,4 +10,16 @@ export default defineConfig({
       prerender: { outputPath: "/index.html" },
     },
   },
+  vite: {
+    ssr: {
+      noExternal: true,
+    },
+    environments: {
+      server: {
+        resolve: {
+          noExternal: true,
+        },
+      },
+    },
+  },
 });
