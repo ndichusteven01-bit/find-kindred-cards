@@ -240,10 +240,14 @@ async function lookup(rawBin: string): Promise<Outcome> {
     if (result) {
       primary = primary ? mergeResults(primary, result) : result;
       primaryRaw = primaryRaw ?? raw;
-      break;
+      // Keep querying remaining providers if we're still missing bank website or phone
+      if (primary.bankUrl && primary.bankPhone) break;
     }
   }
   if (primary) {
+    if (!primary.bankUrl && primary.bankName) {
+      primary.bankUrl = await guessBankWebsite(primary.bankName, primary.countryCode);
+    }
     await saveToCache(primary, primaryRaw);
     return { status: "success", data: primary };
   }
