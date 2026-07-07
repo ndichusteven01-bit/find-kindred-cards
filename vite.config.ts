@@ -10,13 +10,19 @@ export default defineConfig({
       prerender: { outputPath: "/index.html" },
     },
   },
-  vite: {
-    environments: {
-      ssr: {
-        resolve: {
-          noExternal: true,
+  plugins: [
+    {
+      name: "bundle-worker-dependencies",
+      apply: "build",
+      config: () => ({
+        environments: {
+          ssr: {
+            resolve: {
+              noExternal: true,
+            },
+          },
         },
-      },
+      }),
     },
-  },
+  ],
 });
