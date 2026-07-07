@@ -10,4 +10,19 @@ export default defineConfig({
       prerender: { outputPath: "/index.html" },
     },
   },
+  plugins: [
+    {
+      name: "bundle-worker-dependencies",
+      apply: "build",
+      config: () => ({
+        environments: {
+          ssr: {
+            resolve: {
+              noExternal: true,
+            },
+          },
+        },
+      }),
+    },
+  ],
 });
