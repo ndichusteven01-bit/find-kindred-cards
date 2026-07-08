@@ -16,7 +16,7 @@ export default defineConfig({
       apply: "build",
       config: () => ({
         environments: {
-          ssr: {
+          server: {
             resolve: {
               noExternal: true,
             },
