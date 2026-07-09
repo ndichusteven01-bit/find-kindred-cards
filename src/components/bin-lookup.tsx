@@ -66,6 +66,9 @@ function display(field: keyof BinResult, data: BinResult | null): React.ReactNod
       </a>
     );
   }
+  if ((field === "bankUrl" || field === "bankPhone") && (v === null || v === undefined || v === "")) {
+    return <Muted>Issuer contact search unavailable</Muted>;
+  }
   if (v === null || v === undefined || v === "") return <Muted>Not published</Muted>;
   return String(v);
 }

@@ -10,6 +10,15 @@ const CORS = {
   "Access-Control-Max-Age": "86400",
 };
 
+const JSON_HEADERS = {
+  "Content-Type": "application/json",
+  "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+  ...CORS,
+};
+
+const PROVIDER_TIMEOUT_MS = 2_800;
+const ENRICH_TIMEOUT_MS = 2_200;
+
 interface BinResult {
   bin: string;
   scheme: string | null;
@@ -53,6 +62,16 @@ interface Provider {
   url: (bin: string) => string;
   headers?: Record<string, string>;
   parse: (bin: string, raw: unknown) => BinResult | null;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function parseBinlist(bin: string, r: any): BinResult | null {
@@ -149,7 +168,7 @@ const providers: Provider[] = [
 
 async function queryProvider(p: Provider, bin: string): Promise<{ result: BinResult | null; raw: unknown; hardError: boolean }> {
   try {
-    const res = await fetch(p.url(bin), { headers: p.headers });
+    const res = await fetchWithTimeout(p.url(bin), { headers: p.headers }, PROVIDER_TIMEOUT_MS);
     if (res.status === 404) return { result: null, raw: null, hardError: false };
     if (!res.ok) return { result: null, raw: null, hardError: true };
     const raw = await res.json();
@@ -171,16 +190,20 @@ function mergeResults(primary: BinResult, extra: BinResult | null): BinResult {
 }
 
 function getSupabase() {
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !key) {
+    console.error("Missing backend configuration", { hasUrl: Boolean(url), hasKey: Boolean(key) });
+    return null;
+  }
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
 async function fromCache(bin: string): Promise<BinResult | null> {
   const supabase = getSupabase();
+  if (!supabase) return null;
   const { data, error } = await supabase.from("bin_cache").select("*").eq("bin", bin).maybeSingle();
   if (error || !data) return null;
-  supabase.from("bin_cache").update({ lookups: (data.lookups ?? 1) + 1 }).eq("bin", bin).then(() => {});
   return {
     bin: data.bin,
     scheme: data.scheme,
@@ -202,26 +225,35 @@ async function fromCache(bin: string): Promise<BinResult | null> {
 
 async function saveToCache(r: BinResult, raw: unknown): Promise<void> {
   const supabase = getSupabase();
-  await supabase.from("bin_cache").upsert(
-    {
-      bin: r.bin,
-      scheme: r.scheme,
-      brand: r.brand,
-      card_type: r.cardType,
-      category: r.category,
-      bank_name: r.bankName,
-      bank_url: r.bankUrl,
-      bank_phone: r.bankPhone,
-      country_name: r.countryName,
-      country_code: r.countryCode,
-      country_emoji: r.countryEmoji,
-      currency: r.currency,
-      prepaid: r.prepaid,
-      commercial: r.commercial,
-      raw: (raw ?? null) as any,
-    },
-    { onConflict: "bin" },
-  );
+  if (!supabase) return;
+  try {
+    await supabase.from("bin_cache").upsert(
+      {
+        bin: r.bin,
+        scheme: r.scheme,
+        brand: r.brand,
+        card_type: r.cardType,
+        category: r.category,
+        bank_name: r.bankName,
+        bank_url: r.bankUrl,
+        bank_phone: r.bankPhone,
+        country_name: r.countryName,
+        country_code: r.countryCode,
+        country_emoji: r.countryEmoji,
+        currency: r.currency,
+        prepaid: r.prepaid,
+        commercial: r.commercial,
+        raw: (raw ?? null) as any,
+      },
+      { onConflict: "bin" },
+    );
+  } catch {
+    // Cache writes are best-effort. Lookup should still succeed under database pressure.
+  }
+}
+
+function hasBankContact(r: BinResult): boolean {
+  return Boolean(r.bankUrl && r.bankPhone);
 }
 
 async function lookup(rawBin: string): Promise<Outcome> {
@@ -229,24 +261,23 @@ async function lookup(rawBin: string): Promise<Outcome> {
   if (bin.length < 6) return { status: "error", message: "Enter at least the first 6 digits of the card." };
 
   const cached = await fromCache(bin);
-  if (cached) return { status: "success", data: cached };
+  if (cached && hasBankContact(cached)) return { status: "success", data: cached };
 
-  let primary: BinResult | null = null;
+  let primary: BinResult | null = cached;
   let primaryRaw: unknown = null;
   let anyReached = false;
-  for (const p of providers) {
-    const { result, raw, hardError } = await queryProvider(p, bin);
+
+  const providerResults = await Promise.all(providers.map((p) => queryProvider(p, bin)));
+  for (const { result, raw, hardError } of providerResults) {
     if (!hardError) anyReached = true;
     if (result) {
       primary = primary ? mergeResults(primary, result) : result;
       primaryRaw = primaryRaw ?? raw;
-      // Keep querying remaining providers if we're still missing bank website or phone
-      if (primary.bankUrl && primary.bankPhone) break;
     }
   }
   if (primary) {
-    if (!primary.bankUrl && primary.bankName) {
-      primary.bankUrl = await guessBankWebsite(primary.bankName, primary.countryCode);
+    if (primary.bankName && (!primary.bankUrl || !primary.bankPhone)) {
+      primary = await enrichBankContact(primary);
     }
     await saveToCache(primary, primaryRaw);
     return { status: "success", data: primary };
@@ -255,27 +286,42 @@ async function lookup(rawBin: string): Promise<Outcome> {
   return { status: "not_found" };
 }
 
+async function enrichBankContact(result: BinResult): Promise<BinResult> {
+  const enriched = { ...result };
+  if (!enriched.bankUrl && enriched.bankName) {
+    enriched.bankUrl = await guessBankWebsite(enriched.bankName, enriched.countryCode);
+  }
+  if (!enriched.bankPhone && enriched.bankUrl) {
+    enriched.bankPhone = await findBankPhone(enriched.bankUrl);
+  }
+  if (!enriched.bankPhone && enriched.bankName) {
+    enriched.bankPhone = await searchBankPhone(enriched.bankName, enriched.countryCode, enriched.bankUrl);
+  }
+  return enriched;
+}
+
 async function guessBankWebsite(bankName: string, countryCode: string | null): Promise<string | null> {
   try {
     const query = encodeURIComponent(`${bankName}${countryCode ? " " + countryCode : ""} official bank website`);
-    const res = await fetch(`https://api.duckduckgo.com/?q=${query}&format=json&no_html=1&no_redirect=1&t=binlookup`, {
+    const candidates = await searchBankWebCandidates(query);
+    const res = await fetchWithTimeout(`https://api.duckduckgo.com/?q=${query}&format=json&no_html=1&no_redirect=1&t=binlookup`, {
       headers: { Accept: "application/json", "User-Agent": "bin-lookup-app" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null) as any;
-    const candidates: string[] = [];
-    if (data?.AbstractURL) candidates.push(data.AbstractURL);
-    if (Array.isArray(data?.Results)) for (const r of data.Results) if (r?.FirstURL) candidates.push(r.FirstURL);
-    if (Array.isArray(data?.RelatedTopics)) {
-      for (const r of data.RelatedTopics) {
-        if (r?.FirstURL) candidates.push(r.FirstURL);
-        if (Array.isArray(r?.Topics)) for (const t of r.Topics) if (t?.FirstURL) candidates.push(t.FirstURL);
+    }, ENRICH_TIMEOUT_MS);
+    if (res.ok) {
+      const data = await res.json().catch(() => null) as any;
+      if (data?.AbstractURL) candidates.push(data.AbstractURL);
+      if (Array.isArray(data?.Results)) for (const r of data.Results) if (r?.FirstURL) candidates.push(r.FirstURL);
+      if (Array.isArray(data?.RelatedTopics)) {
+        for (const r of data.RelatedTopics) {
+          if (r?.FirstURL) candidates.push(r.FirstURL);
+          if (Array.isArray(r?.Topics)) for (const t of r.Topics) if (t?.FirstURL) candidates.push(t.FirstURL);
+        }
       }
     }
     for (const url of candidates) {
       try {
         const host = new URL(url).hostname.replace(/^www\./, "");
-        if (host && !/duckduckgo|wikipedia|facebook|twitter|linkedin|youtube|instagram|bloomberg/i.test(host)) {
+        if (isUsableBankHost(host)) {
           return host;
         }
       } catch { /* skip */ }
@@ -284,6 +330,114 @@ async function guessBankWebsite(bankName: string, countryCode: string | null): P
   } catch {
     return null;
   }
+}
+
+async function searchBankWebCandidates(encodedQuery: string): Promise<string[]> {
+  try {
+    const res = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodedQuery}`, {
+      headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (compatible; bin-lookup-app)" },
+    }, ENRICH_TIMEOUT_MS);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const candidates: string[] = [];
+    for (const match of html.matchAll(/class=["']result__a["'][^>]+href=["']([^"']+)/gi)) {
+      const decoded = decodeSearchRedirect(match[1]);
+      if (decoded) candidates.push(decoded);
+    }
+    for (const match of html.matchAll(/href=["']([^"']*\/l\/\?uddg=[^"']+)/gi)) {
+      const decoded = decodeSearchRedirect(match[1]);
+      if (decoded) candidates.push(decoded);
+    }
+    return [...new Set(candidates)];
+  } catch {
+    return [];
+  }
+}
+
+async function searchBankPhone(bankName: string, countryCode: string | null, bankUrl: string | null): Promise<string | null> {
+  try {
+    const host = bankUrl ? new URL(bankUrl.startsWith("http") ? bankUrl : `https://${bankUrl}`).hostname.replace(/^www\./, "") : "";
+    const query = encodeURIComponent(`${bankName}${countryCode ? " " + countryCode : ""}${host ? " " + host : ""} customer service phone contact`);
+    const res = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${query}`, {
+      headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (compatible; bin-lookup-app)" },
+    }, ENRICH_TIMEOUT_MS);
+    if (!res.ok) return null;
+    return extractPhone(await res.text());
+  } catch {
+    return null;
+  }
+}
+
+function decodeSearchRedirect(value: string): string | null {
+  try {
+    const unescaped = value.replaceAll("&amp;", "&");
+    const parsed = new URL(unescaped.startsWith("//") ? `https:${unescaped}` : unescaped);
+    const redirected = parsed.searchParams.get("uddg");
+    return redirected ? decodeURIComponent(redirected) : parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function isUsableBankHost(host: string): boolean {
+  return Boolean(host && !/duckduckgo|wikipedia|facebook|twitter|x\.com|linkedin|youtube|instagram|bloomberg|crunchbase|apps\.apple|play\.google/i.test(host));
+}
+
+function toHttpsUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value.startsWith("http") ? value : `https://${value}`);
+    if (!isUsableBankHost(parsed.hostname.replace(/^www\./, ""))) return null;
+    return `https://${parsed.hostname.replace(/^www\./, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function findBankPhone(bankUrl: string): Promise<string | null> {
+  const base = toHttpsUrl(bankUrl);
+  if (!base) return null;
+  const urls = [base, `${base}/contact`, `${base}/contact-us`, `${base}/customer-service`, `${base}/support`];
+  for (const url of urls) {
+    try {
+      const res = await fetchWithTimeout(url, {
+        headers: { Accept: "text/html,text/plain;q=0.9,*/*;q=0.8", "User-Agent": "bin-lookup-app" },
+      }, ENRICH_TIMEOUT_MS);
+      if (!res.ok) continue;
+      const text = (await res.text()).slice(0, 250_000);
+      const telHref = text.match(/href=["']tel:([^"']+)/i)?.[1];
+      const tel = cleanPhone(telHref ?? "");
+      if (tel) return tel;
+      const phone = extractPhone(text);
+      if (phone) return phone;
+    } catch {
+      // Try the next likely contact URL.
+    }
+  }
+  return null;
+}
+
+function extractPhone(html: string): string | null {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const phonePattern = /\+?\d[\d\s().-]{7,}\d/g;
+  const matches = [...text.matchAll(phonePattern)];
+  const preferred = matches.find((match) => {
+    const start = Math.max(0, (match.index ?? 0) - 90);
+    const end = Math.min(text.length, (match.index ?? 0) + match[0].length + 90);
+    return /phone|tel|call|contact|customer|support|service/i.test(text.slice(start, end));
+  });
+  return cleanPhone(preferred?.[0] ?? matches[0]?.[0] ?? "");
+}
+
+function cleanPhone(value: string): string | null {
+  const cleaned = value.replace(/%20/g, " ").replace(/[^+\d().\-\s]/g, " ").replace(/\s+/g, " ").trim();
+  const digits = cleaned.replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 16) return null;
+  if (/^(\d)\1+$/.test(digits)) return null;
+  return cleaned;
 }
 
 Deno.serve(async (req: Request) => {
@@ -299,12 +453,12 @@ Deno.serve(async (req: Request) => {
     const outcome = await lookup(bin);
     return new Response(JSON.stringify(outcome), {
       status: 200,
-      headers: { "Content-Type": "application/json", ...CORS },
+      headers: JSON_HEADERS,
     });
   } catch (e) {
     return new Response(
       JSON.stringify({ status: "error", message: e instanceof Error ? e.message : "Server error" }),
-      { status: 500, headers: { "Content-Type": "application/json", ...CORS } },
+      { status: 500, headers: { ...JSON_HEADERS, "Cache-Control": "no-store" } },
     );
   }
 });
