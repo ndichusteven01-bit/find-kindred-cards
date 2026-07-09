@@ -300,18 +300,19 @@ async function enrichBankContact(result: BinResult): Promise<BinResult> {
 async function guessBankWebsite(bankName: string, countryCode: string | null): Promise<string | null> {
   try {
     const query = encodeURIComponent(`${bankName}${countryCode ? " " + countryCode : ""} official bank website`);
+    const candidates = await searchBankWebCandidates(query);
     const res = await fetchWithTimeout(`https://api.duckduckgo.com/?q=${query}&format=json&no_html=1&no_redirect=1&t=binlookup`, {
       headers: { Accept: "application/json", "User-Agent": "bin-lookup-app" },
     }, ENRICH_TIMEOUT_MS);
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null) as any;
-    const candidates: string[] = [];
-    if (data?.AbstractURL) candidates.push(data.AbstractURL);
-    if (Array.isArray(data?.Results)) for (const r of data.Results) if (r?.FirstURL) candidates.push(r.FirstURL);
-    if (Array.isArray(data?.RelatedTopics)) {
-      for (const r of data.RelatedTopics) {
-        if (r?.FirstURL) candidates.push(r.FirstURL);
-        if (Array.isArray(r?.Topics)) for (const t of r.Topics) if (t?.FirstURL) candidates.push(t.FirstURL);
+    if (res.ok) {
+      const data = await res.json().catch(() => null) as any;
+      if (data?.AbstractURL) candidates.push(data.AbstractURL);
+      if (Array.isArray(data?.Results)) for (const r of data.Results) if (r?.FirstURL) candidates.push(r.FirstURL);
+      if (Array.isArray(data?.RelatedTopics)) {
+        for (const r of data.RelatedTopics) {
+          if (r?.FirstURL) candidates.push(r.FirstURL);
+          if (Array.isArray(r?.Topics)) for (const t of r.Topics) if (t?.FirstURL) candidates.push(t.FirstURL);
+        }
       }
     }
     for (const url of candidates) {
@@ -323,6 +324,39 @@ async function guessBankWebsite(bankName: string, countryCode: string | null): P
       } catch { /* skip */ }
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+async function searchBankWebCandidates(encodedQuery: string): Promise<string[]> {
+  try {
+    const res = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodedQuery}`, {
+      headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (compatible; bin-lookup-app)" },
+    }, ENRICH_TIMEOUT_MS);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const candidates: string[] = [];
+    for (const match of html.matchAll(/class=["']result__a["'][^>]+href=["']([^"']+)/gi)) {
+      const decoded = decodeSearchRedirect(match[1]);
+      if (decoded) candidates.push(decoded);
+    }
+    for (const match of html.matchAll(/href=["']([^"']*\/l\/\?uddg=[^"']+)/gi)) {
+      const decoded = decodeSearchRedirect(match[1]);
+      if (decoded) candidates.push(decoded);
+    }
+    return [...new Set(candidates)];
+  } catch {
+    return [];
+  }
+}
+
+function decodeSearchRedirect(value: string): string | null {
+  try {
+    const unescaped = value.replaceAll("&amp;", "&");
+    const parsed = new URL(unescaped.startsWith("//") ? `https:${unescaped}` : unescaped);
+    const redirected = parsed.searchParams.get("uddg");
+    return redirected ? decodeURIComponent(redirected) : parsed.href;
   } catch {
     return null;
   }
