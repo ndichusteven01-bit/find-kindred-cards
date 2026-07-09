@@ -24,11 +24,20 @@ export default defineConfig({
         const src = path.resolve("dist/server/index.mjs");
         const dest = path.resolve("dist/server/server.js");
         try {
-          await fs.copyFile(src, dest);
+          await fs.access(src);
         } catch {
-          // Ignore: this hook fires per-environment; the file only exists
-          // after nitro finishes the ssr build.
+          // Nitro hasn't produced the worker yet on this pass.
+          return;
         }
+        // Shim: nitro's cloudflare-module handler expects (request, env, ctx).
+        // Vite's preview server plugin invokes `fetch(request)` with a plain
+        // Node/Web Request. Wrap it so the prerender crawl works.
+        const shim = `import handler from "./index.mjs";
+const noop = () => {};
+const ctx = { waitUntil: noop, passThroughOnException: noop };
+export default { fetch(request) { return handler.fetch(request, {}, ctx); } };
+`;
+        await fs.writeFile(dest, shim);
       },
     },
   ],
