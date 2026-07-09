@@ -10,6 +10,15 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   nitro: false,
+  vite: {
+    // Lovable's published worker must not externalize React/TanStack modules.
+    // The live 502 was: No such module "react" imported from "server.js".
+    ssr: { target: "webworker", noExternal: true },
+    environments: {
+      server: { resolve: { noExternal: true } },
+      ssr: { resolve: { noExternal: true } },
+    },
+  },
   tanstackStart: {
     spa: {
       enabled: true,
