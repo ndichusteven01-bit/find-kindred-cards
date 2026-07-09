@@ -35,7 +35,16 @@ export default defineConfig({
         const shim = `import handler from "./index.mjs";
 const noop = () => {};
 const ctx = { waitUntil: noop, passThroughOnException: noop };
-export default { fetch(request) { return handler.fetch(request, {}, ctx); } };
+// Node's undici Request exposes \`ip\` as a read-only getter; nitro's
+// cloudflare handler assigns to it. Pre-define writable slots so the
+// wrapped worker can boot under the vite preview server for prerender.
+function adaptRequest(request) {
+  for (const key of ["ip", "runtime", "waitUntil"]) {
+    try { Object.defineProperty(request, key, { writable: true, configurable: true, value: undefined }); } catch {}
+  }
+  return request;
+}
+export default { fetch(request) { return handler.fetch(adaptRequest(request), {}, ctx); } };
 `;
         await fs.writeFile(dest, shim);
       },
