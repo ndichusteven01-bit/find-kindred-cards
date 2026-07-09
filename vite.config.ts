@@ -19,10 +19,10 @@ export default defineConfig({
           return {
             // Lovable's published worker must not externalize React/TanStack modules.
             // The live 502 was: No such module "react" imported from "server.js".
-            ssr: { target: "webworker", noExternal: true },
+            ssr: { target: "webworker", noExternal: true as const },
             environments: {
-              server: { resolve: { noExternal: true } },
-              ssr: { resolve: { noExternal: true } },
+              server: { resolve: { noExternal: true as const } },
+              ssr: { resolve: { noExternal: true as const } },
             },
           };
         },
