@@ -294,6 +294,9 @@ async function enrichBankContact(result: BinResult): Promise<BinResult> {
   if (!enriched.bankPhone && enriched.bankUrl) {
     enriched.bankPhone = await findBankPhone(enriched.bankUrl);
   }
+  if (!enriched.bankPhone && enriched.bankName) {
+    enriched.bankPhone = await searchBankPhone(enriched.bankName, enriched.countryCode, enriched.bankUrl);
+  }
   return enriched;
 }
 
@@ -348,6 +351,20 @@ async function searchBankWebCandidates(encodedQuery: string): Promise<string[]> 
     return [...new Set(candidates)];
   } catch {
     return [];
+  }
+}
+
+async function searchBankPhone(bankName: string, countryCode: string | null, bankUrl: string | null): Promise<string | null> {
+  try {
+    const host = bankUrl ? new URL(bankUrl.startsWith("http") ? bankUrl : `https://${bankUrl}`).hostname.replace(/^www\./, "") : "";
+    const query = encodeURIComponent(`${bankName}${countryCode ? " " + countryCode : ""}${host ? " " + host : ""} customer service phone contact`);
+    const res = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${query}`, {
+      headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (compatible; bin-lookup-app)" },
+    }, ENRICH_TIMEOUT_MS);
+    if (!res.ok) return null;
+    return extractPhone(await res.text());
+  } catch {
+    return null;
   }
 }
 
